@@ -71,11 +71,11 @@ public:
 
 	void add_vertices_to_array(Vector<Vector3> &array, const Transform3D &p_xform);
 
-	void set_custom_solver_bias(real_t p_bias);
+	virtual void set_custom_solver_bias(real_t p_bias);
 	real_t get_custom_solver_bias() const;
 
 	real_t get_margin() const;
-	void set_margin(real_t p_margin);
+	virtual void set_margin(real_t p_margin);
 
 	void set_debug_color(const Color &p_color);
 	Color get_debug_color() const;

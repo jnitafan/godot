@@ -39,6 +39,7 @@
 #include "scene/resources/3d/concave_polygon_shape_3d.h"
 #include "scene/resources/3d/convex_polygon_shape_3d.h"
 #include "scene/resources/3d/world_boundary_shape_3d.h"
+#include "scene/resources/3d/wedge_shape_3d.h"
 
 void CollisionShape3D::make_convex_from_siblings() {
 	Node *p = get_parent();
@@ -72,6 +73,34 @@ void CollisionShape3D::make_convex_from_siblings() {
 	set_shape(shape_new);
 }
 
+void CollisionShape3D::_add_shapes_to_owner() {
+	if (!collision_object || shape.is_null()) {
+		return;
+	}
+
+	Ref<WedgeShape3D> wedge = shape;
+	if (wedge.is_valid()) {
+		// A zero-degree sector has no volume and no collision shape entries.
+		if (wedge->get_angle() <= 0.0) {
+			return;
+		}
+		collision_object->shape_owner_add_shape(owner_id, shape);
+		for (const Ref<ConvexPolygonShape3D> &piece : wedge->get_additional_shapes()) {
+			collision_object->shape_owner_add_shape(owner_id, piece);
+		}
+	} else {
+		collision_object->shape_owner_add_shape(owner_id, shape);
+	}
+}
+
+void CollisionShape3D::_wedge_changed() {
+	if (!collision_object) {
+		return;
+	}
+	collision_object->shape_owner_clear_shapes(owner_id);
+	_add_shapes_to_owner();
+}
+
 void CollisionShape3D::_update_in_shape_owner(bool p_xform_only) {
 	collision_object->shape_owner_set_transform(owner_id, get_transform());
 	if (p_xform_only) {
@@ -86,9 +115,7 @@ void CollisionShape3D::_notification(int p_what) {
 			collision_object = Object::cast_to<CollisionObject3D>(get_parent());
 			if (collision_object) {
 				owner_id = collision_object->create_shape_owner(this);
-				if (shape.is_valid()) {
-					collision_object->shape_owner_add_shape(owner_id, shape);
-				}
+				_add_shapes_to_owner();
 
 				_update_in_shape_owner();
 			}
@@ -194,6 +221,9 @@ void CollisionShape3D::set_shape(const Ref<Shape3D> &p_shape) {
 		return;
 	}
 	if (shape.is_valid()) {
+		if (Object::cast_to<WedgeShape3D>(*shape)) {
+			shape->disconnect_changed(callable_mp(this, &CollisionShape3D::_wedge_changed));
+		}
 #ifdef DEBUG_ENABLED
 		shape->disconnect_changed(callable_mp(this, &CollisionShape3D::_shape_changed));
 #endif // DEBUG_ENABLED
@@ -212,6 +242,9 @@ void CollisionShape3D::set_shape(const Ref<Shape3D> &p_shape) {
 #endif // DEBUG_ENABLED
 
 		shape->connect_changed(callable_mp((Node3D *)this, &Node3D::update_gizmos));
+		if (Object::cast_to<WedgeShape3D>(*shape)) {
+			shape->connect_changed(callable_mp(this, &CollisionShape3D::_wedge_changed));
+		}
 #ifdef DEBUG_ENABLED
 		shape->connect_changed(callable_mp(this, &CollisionShape3D::_shape_changed));
 #endif // DEBUG_ENABLED
@@ -219,9 +252,7 @@ void CollisionShape3D::set_shape(const Ref<Shape3D> &p_shape) {
 	update_gizmos();
 	if (collision_object) {
 		collision_object->shape_owner_clear_shapes(owner_id);
-		if (shape.is_valid()) {
-			collision_object->shape_owner_add_shape(owner_id, shape);
-		}
+		_add_shapes_to_owner();
 	}
 
 	if (is_inside_tree() && collision_object) {

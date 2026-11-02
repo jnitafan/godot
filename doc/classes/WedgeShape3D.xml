@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="WedgeShape3D" inherits="ConvexPolygonShape3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		A wedge cut from a vertical cylinder, like a slice of cheese.
+	</brief_description>
+	<description>
+		A vertical circular sector with two radial faces meeting at the local Y axis. The wedge is centered on local +Z, and its angular extent is symmetric about that direction.
+		Assign this resource to a CollisionShape3D to obtain full collisions for angles from 0 to 360 degrees. Angles greater than 180 degrees are concave and are assembled from multiple convex collision pieces. This assembly works with Godot Physics and Jolt, including dynamic PhysicsBody3D nodes.
+		The circular edge is polygonal, approximated according to radial_segments. Angle 0 creates no collision entries when used by CollisionShape3D.
+		Directly using the inherited RID in PhysicsServer3D only represents the first convex sector when angle exceeds 180 degrees. Use CollisionShape3D for the complete shape.
+	</description>
+	<members>
+		<member name="radius" type="float" setter="set_radius" getter="get_radius" default="1.0">
+			Distance from the center axis to the outer circular edge, in meters.
+		</member>
+		<member name="height" type="float" setter="set_height" getter="get_height" default="1.0">
+			Full vertical extent of the wedge, in meters.
+		</member>
+		<member name="angle" type="float" setter="set_angle" getter="get_angle" default="60.0">
+			Slice angle in degrees, from 0 to 360. 360 creates a full cylinder.
+		</member>
+		<member name="radial_segments" type="int" setter="set_radial_segments" getter="get_radial_segments" default="64">
+			Target tessellation around a full circle, between 8 and 256. Each convex piece receives at least two arc segments.
+		</member>
+	</members>
+</class>

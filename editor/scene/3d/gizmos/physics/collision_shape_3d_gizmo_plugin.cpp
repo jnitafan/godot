@@ -47,6 +47,7 @@
 #include "scene/resources/3d/separation_ray_shape_3d.h"
 #include "scene/resources/3d/sphere_shape_3d.h"
 #include "scene/resources/3d/world_boundary_shape_3d.h"
+#include "scene/resources/3d/wedge_shape_3d.h"
 
 CollisionShape3DGizmoPlugin::CollisionShape3DGizmoPlugin() {
 	helper.instantiate();
@@ -110,6 +111,15 @@ String CollisionShape3DGizmoPlugin::get_handle_name(const EditorNode3DGizmo *p_g
 		return "";
 	}
 
+	if (Object::cast_to<WedgeShape3D>(*s)) {
+		switch (p_id) {
+			case 0: return "Radius";
+			case 1: return "Height";
+			case 2: return "Angle";
+		}
+		return "";
+	}
+
 	if (Object::cast_to<SphereShape3D>(*s)) {
 		return "Radius";
 	}
@@ -138,6 +148,16 @@ Variant CollisionShape3DGizmoPlugin::get_handle_value(const EditorNode3DGizmo *p
 
 	Ref<Shape3D> s = cs->get_shape();
 	if (s.is_null()) {
+		return Variant();
+	}
+
+	if (Object::cast_to<WedgeShape3D>(*s)) {
+		Ref<WedgeShape3D> ws = s;
+		switch (p_id) {
+			case 0: return ws->get_radius();
+			case 1: return ws->get_height();
+			case 2: return ws->get_angle();
+		}
 		return Variant();
 	}
 
@@ -183,6 +203,36 @@ void CollisionShape3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, i
 
 	Vector3 sg[2];
 	helper->get_segment(p_camera, p_point, sg);
+
+	if (Object::cast_to<WedgeShape3D>(*s)) {
+		Ref<WedgeShape3D> ws = s;
+		if (p_id == 0 || p_id == 1) {
+			Vector3 closest_on_axis, closest_on_ray;
+			const Vector3 axis = p_id == 0 ? Vector3(0, 0, 4096) : Vector3(0, 4096, 0);
+			Geometry3D::get_closest_points_between_segments(Vector3(), axis, sg[0], sg[1], closest_on_axis, closest_on_ray);
+			real_t value = p_id == 0 ? closest_on_axis.z : closest_on_axis.y * 2.0;
+			if (Node3DEditor::get_singleton()->is_snap_enabled()) {
+				value = Math::snapped(value, Node3DEditor::get_singleton()->get_translate_snap());
+			}
+			value = MAX(value, (real_t)0.001);
+			if (p_id == 0) {
+				ws->set_radius(value);
+			} else {
+				ws->set_height(value);
+			}
+		} else if (p_id == 2) {
+			Vector3 hit;
+			const Plane plane(Vector3(0, 1, 0), ws->get_height() * 0.5);
+			if (plane.intersects_segment(sg[0], sg[1], &hit)) {
+				real_t value = CLAMP(2.0 * Math::rad_to_deg(Math::abs(Math::atan2(hit.x, hit.z))), 0.0, 360.0);
+				if (Node3DEditor::get_singleton()->is_snap_enabled()) {
+					value = Math::snapped(value, Node3DEditor::get_singleton()->get_rotate_snap());
+				}
+				ws->set_angle(CLAMP(value, 0.0, 360.0));
+			}
+		}
+		return;
+	}
 
 	if (Object::cast_to<SphereShape3D>(*s)) {
 		Ref<SphereShape3D> ss = s;
@@ -255,6 +305,22 @@ void CollisionShape3DGizmoPlugin::commit_handle(const EditorNode3DGizmo *p_gizmo
 
 	Ref<Shape3D> s = cs->get_shape();
 	if (s.is_null()) {
+		return;
+	}
+
+	if (Object::cast_to<WedgeShape3D>(*s)) {
+		Ref<WedgeShape3D> ws = s;
+		const StringName setter = p_id == 0 ? SNAME("set_radius") : (p_id == 1 ? SNAME("set_height") : SNAME("set_angle"));
+		const real_t value = p_id == 0 ? ws->get_radius() : (p_id == 1 ? ws->get_height() : ws->get_angle());
+		if (p_cancel) {
+			ws->call(setter, p_restore);
+			return;
+		}
+		EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
+		ur->create_action(TTR("Change Wedge Shape"));
+		ur->add_do_method(ws.ptr(), setter, value);
+		ur->add_undo_method(ws.ptr(), setter, p_restore);
+		ur->commit_action();
 		return;
 	}
 
@@ -637,7 +703,22 @@ void CollisionShape3DGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 		p_gizmo->add_collision_segments(points);
 	}
 
-	if (Object::cast_to<ConvexPolygonShape3D>(*s)) {
+	if (Object::cast_to<WedgeShape3D>(*s)) {
+		Ref<WedgeShape3D> ws = s;
+		const Vector<Vector3> lines = ws->get_debug_mesh_lines();
+		p_gizmo->add_lines(lines, material, false, collision_color);
+		p_gizmo->add_collision_segments(lines);
+		if (!shape_readonly) {
+			const real_t r = ws->get_radius();
+			const real_t h = ws->get_height() * 0.5;
+			const real_t a = Math::deg_to_rad(ws->get_angle() * 0.5);
+			Vector<Vector3> handles;
+			handles.push_back(Vector3(0, 0, r));
+			handles.push_back(Vector3(0, h, 0));
+			handles.push_back(Vector3(Math::sin(a) * r, h, Math::cos(a) * r));
+			p_gizmo->add_handles(handles, handles_material);
+		}
+	} else if (Object::cast_to<ConvexPolygonShape3D>(*s)) {
 		Vector<Vector3> points = Object::cast_to<ConvexPolygonShape3D>(*s)->get_points();
 
 		if (points.size() > 1) { // Need at least 2 points for a line.

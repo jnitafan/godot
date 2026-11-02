@@ -46,6 +46,8 @@ class CollisionShape3D : public Node3D {
 	bool debug_fill = true;
 
 	Color _get_default_debug_color() const;
+	void _add_shapes_to_owner();
+	void _wedge_changed();
 
 #ifdef DEBUG_ENABLED
 	void _shape_changed();
